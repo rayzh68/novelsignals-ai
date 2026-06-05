@@ -1,0 +1,1 @@
+﻿# NovelSignals AI package

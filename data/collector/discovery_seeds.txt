@@ -1,0 +1,16 @@
+﻿# GoodNovel category seeds
+https://www.goodnovel.com/stories/Romance-novels
+https://www.goodnovel.com/stories/Werewolf-novels
+https://www.goodnovel.com/stories/Billionaire-novels
+https://www.goodnovel.com/stories/Mafia-novels
+https://www.goodnovel.com/stories/Fantasy-novels
+https://www.goodnovel.com/stories/Paranormal-novels
+https://www.goodnovel.com/stories/Urban-novels
+https://www.goodnovel.com/stories/Mystery-Thriller-novels
+
+# GoodNovel ranking / market-entry seeds
+https://www.goodnovel.com/rankings
+https://www.goodnovel.com/tag/top-werewolf-romance-novel-stories
+
+# Dreame validation seeds
+https://www.dreame.com/story/1646404864-true-luna

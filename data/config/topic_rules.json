@@ -1,0 +1,30 @@
+﻿{
+  "version": "v1",
+  "mode": "review_required",
+  "description": "Topic generation must not rely on hardcoded business terms in Python code. Terms are promoted from candidates to approved topics only after review.",
+  "approved_terms": [],
+  "rejected_terms": [
+    "after",
+    "life",
+    "night",
+    "alone",
+    "journey",
+    "debt",
+    "ways",
+    "gone",
+    "days",
+    "minutes",
+    "hundred",
+    "wrong",
+    "perfect",
+    "wild"
+  ],
+  "min_book_count": 2,
+  "min_quality_book_count": 2,
+  "min_top10_quality_average_score": 45,
+  "approval_status_values": [
+    "pending_review",
+    "approved",
+    "rejected"
+  ]
+}

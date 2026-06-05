@@ -1,0 +1,1 @@
+﻿python -m novelsignals_ai.content_asset_generator

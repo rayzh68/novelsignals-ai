@@ -1,0 +1,1 @@
+﻿python -m novelsignals_ai.connectors.generic_public_metadata_collector
