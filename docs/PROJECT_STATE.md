@@ -156,3 +156,59 @@ Goal:
 
 NovelSignals rankings should respect platform rankings instead of replacing them.
 
+
+## 2026-06-05
+
+### Phase 5 Result
+
+Status: COMPLETE
+
+Discovery pipeline validated.
+
+Completed:
+
+- Ranking discovery
+- Category discovery
+- Direct-book discovery
+- Priority collection
+- Metadata normalization
+- Catalog generation
+- Market signal generation
+
+Current metrics:
+
+- discovery candidates: 1447
+- metadata books: 102
+- market eligible: 21
+
+Coverage review:
+
+- category: 64
+- direct_book: 5
+- unknown: 33
+
+Unknown investigation shows most remaining books come from:
+
+- series relationships
+- related books
+- legacy recommendation chains
+
+This is coverage expansion, not a pipeline failure.
+
+### Next Phase
+
+Phase 6
+
+Discovery Coverage Expansion
+
+Goal:
+
+Reduce unknown source attribution.
+
+New discovery sources:
+
+- related books
+- series books
+- readers also read
+- author catalog
+

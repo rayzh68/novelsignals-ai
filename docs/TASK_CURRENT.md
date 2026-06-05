@@ -98,3 +98,33 @@ Goal:
 
 Increase ranking/market-entry discovery sources, while keeping Discovery generic and avoiding hardcoded genre/topic logic.
 
+
+## ACTIVE TASK
+
+Phase 6
+
+Discovery Coverage Expansion
+
+Priority:
+
+P1
+Series relationships
+
+P2
+Related books
+
+P3
+Readers also read
+
+P4
+Author catalog traversal
+
+Success Criteria:
+
+unknown attribution
+33 -> below 10
+
+No new standalone modules.
+
+Integrate into existing discovery pipeline.
+
