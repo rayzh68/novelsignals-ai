@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 INPUT_DIR = ROOT / "data" / "input" / "book_metadata"
 OUT_DIR = ROOT / "data" / "current" / "catalog"
 TOPIC_RULES_PATH = ROOT / "data" / "config" / "topic_rules.json"
+DISCOVERY_CANDIDATES_PATH = ROOT / "data" / "discovery" / "discovery_book_candidates.json"
 
 
 DEFAULT_TOPIC_RULES = {
@@ -55,6 +56,63 @@ def slugify(text: str) -> str:
     text = str(text).lower().strip()
     text = re.sub(r"[^a-z0-9]+", "-", text)
     return text.strip("-") or "untitled"
+
+
+def canonical_book_url(url: str) -> str:
+    url = str(url or "").strip()
+    if not url:
+        return ""
+
+    url = url.split("#", 1)[0].split("?", 1)[0]
+
+    m = re.search(r"(https?://[^/]+/book/[^/]+_\d+)", url)
+    if m:
+        return m.group(1)
+
+    m = re.search(r"(https?://[^/]+/story/\d+[-\w]*)", url)
+    if m:
+        return m.group(1)
+
+    return url.rstrip("/")
+
+
+def load_discovery_sources() -> Dict[str, Dict[str, Any]]:
+    candidates = read_json(DISCOVERY_CANDIDATES_PATH, [])
+    if not isinstance(candidates, list):
+        return {}
+
+    index = {}
+    for item in candidates:
+        if not isinstance(item, dict):
+            continue
+
+        url = canonical_book_url(item.get("url", ""))
+        if not url:
+            continue
+
+        index[url] = {
+            "best_source_type": item.get("best_source_type", "unknown"),
+            "discovery_weight": item.get("discovery_weight", 0),
+            "source_refs": item.get("source_refs", []),
+        }
+
+    return index
+
+
+def enrich_with_discovery_source(item: Dict[str, Any], discovery_index: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    source_url = canonical_book_url(item.get("source_url", ""))
+    discovery = discovery_index.get(source_url)
+
+    if not discovery:
+        item["best_source_type"] = "unknown"
+        item["discovery_weight"] = 0
+        item["source_refs"] = []
+        return item
+
+    item["best_source_type"] = discovery.get("best_source_type", "unknown")
+    item["discovery_weight"] = discovery.get("discovery_weight", 0)
+    item["source_refs"] = discovery.get("source_refs", [])
+    return item
 
 
 def load_books() -> List[Dict[str, Any]]:
@@ -129,8 +187,9 @@ def is_market_eligible(item: Dict[str, Any]) -> bool:
     return item.get("market_tier") in {"T1", "T2"}
 
 
-def build_catalog(books: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def build_catalog(books: List[Dict[str, Any]], discovery_index: Dict[str, Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     catalog = []
+    discovery_index = discovery_index or {}
 
     for book in books:
         if not is_real_source(book):
@@ -155,6 +214,8 @@ def build_catalog(books: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "description": book.get("description", ""),
             "cover_image_url": book.get("cover_image_url", ""),
         }
+
+        item = enrich_with_discovery_source(item, discovery_index)
 
         item["metadata_grade"] = metadata_grade(item)
         item["market_tier"] = market_tier(item)
@@ -507,7 +568,8 @@ def build_catalog_outputs() -> Dict[str, Any]:
 
     topic_rules = load_topic_rules()
     books = load_books()
-    catalog = build_catalog(books)
+    discovery_index = load_discovery_sources()
+    catalog = build_catalog(books, discovery_index)
 
     metadata_quality = build_metadata_quality(catalog)
     genre_stats = build_genre_stats(catalog)
@@ -557,3 +619,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
