@@ -70,6 +70,21 @@ def is_allowed_url(url: str) -> bool:
     return urlparse(url).netloc.lower() in ALLOWED_DOMAINS
 
 
+def canonical_book_url(url: str) -> str:
+    parsed = urlparse(url)
+    path = parsed.path
+
+    m = re.search(r"(/book/[^/]+_\d+)", path)
+    if m:
+        return parsed._replace(path=m.group(1), query="", fragment="").geturl()
+
+    m = re.search(r"(/story/\d+[-\w]*)", path)
+    if m:
+        return parsed._replace(path=m.group(1), query="", fragment="").geturl()
+
+    return clean_url(url)
+
+
 def looks_like_book_url(url: str) -> bool:
     path = urlparse(url).path
     return any(pattern.search(path) for pattern in BOOK_URL_PATTERNS)
@@ -83,8 +98,11 @@ def looks_like_discovery_url(url: str) -> bool:
 def classify_source_type(source_url: str) -> str:
     path = urlparse(source_url).path.lower()
 
-    if any(x in path for x in ["ranking", "rank", "top", "trending", "popular", "hot"]):
-        return "ranking"
+    if "/rankings" in path or "/ranking" in path:
+        return "official_ranking"
+
+    if any(x in path for x in ["rank", "top", "trending", "popular", "hot"]):
+        return "topic_ranking"
 
     if "/stories/" in path:
         return "category"
@@ -96,8 +114,10 @@ def classify_source_type(source_url: str) -> str:
 
 
 def discovery_weight(source_type: str) -> int:
-    if source_type == "ranking":
+    if source_type == "official_ranking":
         return 100
+    if source_type == "topic_ranking":
+        return 85
     if source_type == "category":
         return 60
     if source_type == "direct_book":
@@ -129,6 +149,7 @@ def extract_links(base_url: str, html: str) -> List[str]:
 
 
 def upsert_candidate(candidates: Dict[str, Dict], book_url: str, source_url: str) -> None:
+    book_url = canonical_book_url(book_url)
     source_type = classify_source_type(source_url)
     weight = discovery_weight(source_type)
 
@@ -256,3 +277,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
