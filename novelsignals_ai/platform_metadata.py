@@ -141,6 +141,27 @@ def extract_review_samples(book: Dict[str, Any], limit: int = 5) -> List[Dict[st
     return samples
 
 
+
+def extract_chapter_count_from_jsonld(items: List[Dict[str, Any]]) -> int | None:
+    max_count = 0
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+
+        item_type = item.get("@type", "")
+        if isinstance(item_type, list):
+            item_type = " ".join(str(x) for x in item_type)
+        item_type = str(item_type).lower()
+
+        if "itemlist" not in item_type:
+            continue
+
+        elements = item.get("itemListElement", [])
+        if isinstance(elements, list):
+            max_count = max(max_count, len(elements))
+
+    return max_count or None
 def extract_goodnovel_metadata(url: str, html: str) -> Dict[str, Any]:
     soup = BeautifulSoup(html, "html.parser")
 
@@ -151,6 +172,7 @@ def extract_goodnovel_metadata(url: str, html: str) -> Dict[str, Any]:
         return extract_generic_metadata(url, html)
 
     rating_data = parse_rating(book)
+    chapter_count = extract_chapter_count_from_jsonld(items)
 
     return {
         "platform": "GoodNovel",
@@ -162,7 +184,7 @@ def extract_goodnovel_metadata(url: str, html: str) -> Dict[str, Any]:
         "status": "",
         "rating": rating_data["rating"],
         "review_count": rating_data["review_count"],
-        "chapter_count": None,
+        "chapter_count": chapter_count,
         "view_count": None,
         "description": str(book.get("description", "")).strip(),
         "cover_image_url": parse_image(book.get("image")) or get_meta_content(soup, "og:image", "twitter:image"),
@@ -275,3 +297,5 @@ def extract_platform_metadata(url: str, html: str) -> Dict[str, Any]:
         return extract_dreame_metadata(url, html)
 
     return extract_generic_metadata(url, html)
+
+

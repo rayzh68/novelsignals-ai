@@ -1,4 +1,5 @@
 ﻿import json
+import os
 import re
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -49,6 +50,11 @@ def load_topic_rules() -> Dict[str, Any]:
 
     merged = dict(DEFAULT_TOPIC_RULES)
     merged.update(rules)
+
+    env_mode = os.getenv("NOVELSIGNALS_TOPIC_MODE", "").strip()
+    if env_mode:
+        merged["mode"] = env_mode
+
     return merged
 
 
@@ -270,6 +276,11 @@ def content_priority(items: List[Dict[str, Any]]) -> str:
 
 
 def approval_status(term: str, topic_rules: Dict[str, Any]) -> str:
+    mode = topic_rules.get("mode", "review_required")
+
+    if mode in {"auto_approve", "mvp_auto_approve"}:
+        return "approved"
+
     term = str(term).strip().lower()
     approved = set(str(x).lower() for x in topic_rules.get("approved_terms", []))
     rejected = set(str(x).lower() for x in topic_rules.get("rejected_terms", []))
@@ -619,4 +630,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
 
