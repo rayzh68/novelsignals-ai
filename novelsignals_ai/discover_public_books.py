@@ -1,4 +1,5 @@
 ﻿import json
+import os
 import re
 import time
 from collections import deque
@@ -17,8 +18,11 @@ SEED_FILE = ROOT / "data" / "collector" / "discovery_seeds.txt"
 OUT_DIR = ROOT / "data" / "discovery"
 BOOK_URL_FILE = ROOT / "data" / "collector" / "goodnovel_urls.txt"
 CANDIDATE_FILE = OUT_DIR / "discovery_book_candidates.json"
+CATALOG_FILE = ROOT / "data" / "current" / "catalog" / "catalog.json"
+HIGH_VALUE_UNKNOWN_MIN_SCORE = 55
+HIGH_VALUE_UNKNOWN_MAX_SEEDS = 30
 
-MAX_PAGES = 80
+MAX_PAGES = int(os.getenv("NOVELSIGNALS_DISCOVER_MAX_PAGES", "300"))
 REQUEST_DELAY_SECONDS = 2
 
 HEADERS = {
@@ -142,8 +146,8 @@ def extract_links(base_url: str, html: str) -> List[str]:
 
         url = clean_url(urljoin(base_url, href))
 
-        if is_allowed_url(url) and looks_like_discovery_url(url):
-            links.append(url)
+        if is_allowed_url(url) and (looks_like_discovery_url(url) or looks_like_book_url(url)):
+            links.append(canonical_book_url(url) if looks_like_book_url(url) else url)
 
     return list(dict.fromkeys(links))
 
@@ -177,10 +181,59 @@ def upsert_candidate(candidates: Dict[str, Dict], book_url: str, source_url: str
         existing["best_source_type"] = source_type
 
 
+
+def read_high_value_unknown_seed_urls() -> List[str]:
+    if not CATALOG_FILE.exists():
+        return []
+
+    try:
+        catalog = json.loads(CATALOG_FILE.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return []
+
+    if not isinstance(catalog, list):
+        return []
+
+    rows = []
+    for item in catalog:
+        if not isinstance(item, dict):
+            continue
+        if item.get("best_source_type") != "unknown":
+            continue
+
+        score = item.get("novelsignals_score") or 0
+        source_url = item.get("source_url") or ""
+
+        if score < HIGH_VALUE_UNKNOWN_MIN_SCORE:
+            continue
+        if not source_url or not looks_like_book_url(source_url):
+            continue
+
+        rows.append({
+            "url": canonical_book_url(source_url),
+            "score": score,
+            "review_count": item.get("review_count") or 0,
+        })
+
+    rows = sorted(
+        rows,
+        key=lambda x: (
+            float(x.get("score", 0) or 0),
+            int(x.get("review_count", 0) or 0),
+        ),
+        reverse=True,
+    )
+
+    return [x["url"] for x in rows[:HIGH_VALUE_UNKNOWN_MAX_SEEDS]]
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     seeds = read_seed_urls()
+    recovery_seeds = read_high_value_unknown_seed_urls()
+    if recovery_seeds:
+        print(f"[RECOVERY] High-value unknown seeds: {len(recovery_seeds)}")
+        seeds = recovery_seeds + seeds
+
     if not seeds:
         print(f"No seeds found: {SEED_FILE}")
         return
@@ -215,7 +268,14 @@ def main() -> None:
                     upsert_candidate(candidates, link, url)
 
                 if link not in visited and len(visited) + len(queue) < MAX_PAGES * 3:
-                    queue.append(link)
+                    source_type = classify_source_type(url)
+
+                    if looks_like_book_url(link) and source_type in {"official_ranking", "topic_ranking"}:
+                        queue.appendleft(link)
+                    elif looks_like_book_url(link) and source_type == "category":
+                        queue.appendleft(link)
+                    else:
+                        queue.append(link)
 
             time.sleep(REQUEST_DELAY_SECONDS)
 
@@ -277,4 +337,8 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+
+
 
