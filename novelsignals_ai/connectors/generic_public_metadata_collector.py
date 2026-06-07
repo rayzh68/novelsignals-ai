@@ -256,7 +256,11 @@ def run_preflight_check(urls: List[str]) -> None:
 
 def main() -> None:
     priority_urls = read_priority_urls()
-    urls = priority_urls if priority_urls else read_urls(CLEAN_URL_FILE if CLEAN_URL_FILE.exists() else URL_FILE)
+    custom_url_file = os.getenv("NOVELSIGNALS_COLLECT_URL_FILE", "").strip()
+    if custom_url_file:
+        urls = read_urls(ROOT / custom_url_file if not Path(custom_url_file).is_absolute() else Path(custom_url_file))
+    else:
+        urls = priority_urls if priority_urls else read_urls(CLEAN_URL_FILE if CLEAN_URL_FILE.exists() else URL_FILE)
     urls = urls[:MAX_COLLECT_URLS]
 
     if not urls:
@@ -264,7 +268,8 @@ def main() -> None:
         print("Add one public novel detail page URL per line and run again.")
         return
 
-    run_preflight_check(urls)
+    if os.getenv("NOVELSIGNALS_SKIP_PREFLIGHT", "").strip() != "1":
+        run_preflight_check(urls)
 
     results = []
 
@@ -323,6 +328,8 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
 
 
 
