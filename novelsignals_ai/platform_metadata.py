@@ -1,4 +1,5 @@
 ﻿import json
+import re
 from typing import Any, Dict, List
 from urllib.parse import urlparse
 
@@ -162,6 +163,65 @@ def extract_chapter_count_from_jsonld(items: List[Dict[str, Any]]) -> int | None
             max_count = max(max_count, len(elements))
 
     return max_count or None
+
+def parse_compact_count(value: str):
+    value = str(value or "").strip().replace(",", "")
+
+    if not value:
+        return None
+
+    match = re.search(r"([\d.]+)\s*([KkMmBb]?)", value)
+
+    if not match:
+        return None
+
+    number_text = match.group(1)
+
+    if not re.search(r"\d", number_text):
+        return None
+
+    try:
+        number = float(number_text)
+    except Exception:
+        return None
+
+    unit = match.group(2).lower()
+
+    if unit == "k":
+        number *= 1000
+    elif unit == "m":
+        number *= 1000000
+    elif unit == "b":
+        number *= 1000000000
+
+    return int(number)
+
+def extract_goodnovel_html_signals(soup: BeautifulSoup) -> Dict[str, Any]:
+    text = soup.get_text(" ", strip=True)
+
+    view_count = None
+    view_matches = re.findall(r"([\d.]+\s*[KkMmBb]?)\s+views?", text, flags=re.I)
+    if view_matches:
+        parsed_views = [parse_compact_count(x) for x in view_matches]
+        parsed_views = [x for x in parsed_views if x is not None]
+        if parsed_views:
+            view_count = max(parsed_views)
+
+    chapter_count = None
+    chapter_nums = []
+    for match in re.findall(r"Chapter\s+(\d+)", text, flags=re.I):
+        try:
+            chapter_nums.append(int(match))
+        except Exception:
+            pass
+    if chapter_nums:
+        chapter_count = max(chapter_nums)
+
+    return {
+        "view_count": view_count,
+        "chapter_count": chapter_count,
+    }
+
 def extract_goodnovel_metadata(url: str, html: str) -> Dict[str, Any]:
     soup = BeautifulSoup(html, "html.parser")
 
@@ -173,6 +233,9 @@ def extract_goodnovel_metadata(url: str, html: str) -> Dict[str, Any]:
 
     rating_data = parse_rating(book)
     chapter_count = extract_chapter_count_from_jsonld(items)
+    html_signals = extract_goodnovel_html_signals(soup)
+    if chapter_count is None:
+        chapter_count = html_signals.get("chapter_count")
 
     return {
         "platform": "GoodNovel",
@@ -185,7 +248,7 @@ def extract_goodnovel_metadata(url: str, html: str) -> Dict[str, Any]:
         "rating": rating_data["rating"],
         "review_count": rating_data["review_count"],
         "chapter_count": chapter_count,
-        "view_count": None,
+        "view_count": html_signals.get("view_count"),
         "description": str(book.get("description", "")).strip(),
         "cover_image_url": parse_image(book.get("image")) or get_meta_content(soup, "og:image", "twitter:image"),
         "language": str(book.get("inLanguage", "en")).strip(),
@@ -203,6 +266,70 @@ def extract_goodnovel_metadata(url: str, html: str) -> Dict[str, Any]:
     }
 
 
+
+def parse_compact_number(value: str):
+    value = str(value or "").strip().replace(",", "")
+    if not value:
+        return None
+
+    multiplier = 1
+    lower = value.lower()
+
+    if lower.endswith("k"):
+        multiplier = 1000
+        value = value[:-1]
+    elif lower.endswith("m"):
+        multiplier = 1000000
+        value = value[:-1]
+    elif lower.endswith("b"):
+        multiplier = 1000000000
+        value = value[:-1]
+
+    try:
+        return int(float(value) * multiplier)
+    except Exception:
+        return None
+
+
+def extract_dreame_author(soup: BeautifulSoup) -> str:
+    tag = soup.select_one(".story_author-name__sInbS span")
+    return tag.get_text(" ", strip=True) if tag else ""
+
+
+def extract_dreame_tags(soup: BeautifulSoup) -> List[str]:
+    tags = []
+    for tag in soup.select(".story_novel-tag-item__RqkdL"):
+        text = tag.get_text(" ", strip=True)
+        if text:
+            tags.append(text)
+    return list(dict.fromkeys(tags))
+
+
+def extract_dreame_counts(soup: BeautifulSoup) -> Dict[str, Any]:
+    counts = {
+        "read_count": None,
+        "follower_count": None,
+    }
+
+    items = soup.select(".story_novel-data-item__GZEl_")
+
+    for item in items:
+        num_el = item.select_one(".story_data-num__M4pvn")
+        label_el = item.select_one(".story_data-text__VUZ2V")
+
+        if not num_el or not label_el:
+            continue
+
+        number = parse_compact_number(num_el.get_text(" ", strip=True))
+        label = label_el.get_text(" ", strip=True).lower()
+
+        if label == "read":
+            counts["read_count"] = number
+        elif label == "follow":
+            counts["follower_count"] = number
+
+    return counts
+
 def extract_dreame_metadata(url: str, html: str) -> Dict[str, Any]:
     soup = BeautifulSoup(html, "html.parser")
 
@@ -214,24 +341,28 @@ def extract_dreame_metadata(url: str, html: str) -> Dict[str, Any]:
     image = get_meta_content(soup, "og:image", "twitter:image")
 
     title = og_title or title_text.replace("-Dreame", "").strip()
+    author = extract_dreame_author(soup)
+    tags = extract_dreame_tags(soup)
+    counts = extract_dreame_counts(soup)
 
     return {
         "platform": "Dreame",
         "url": url,
         "title": title,
-        "author": "",
+        "author": author,
         "genre": "",
-        "tags": [],
+        "tags": tags,
         "status": "",
         "rating": None,
         "review_count": None,
         "chapter_count": None,
-        "view_count": None,
+        "view_count": counts.get("read_count"),
+        "follower_count": counts.get("follower_count"),
         "description": description,
         "cover_image_url": image,
         "language": "en",
         "collector": {
-            "platform_extractor": "dreame_basic_meta",
+            "platform_extractor": "dreame_enriched_html",
             "source_type": "public_html_meta",
             "uses_full_text": False,
             "uses_paid_content": False,
@@ -240,11 +371,11 @@ def extract_dreame_metadata(url: str, html: str) -> Dict[str, Any]:
         "raw_extracted": {
             "title_tag": title_text,
             "og_title": og_title,
-            "description": description,
-            "og_image": image
+            "read_count": counts.get("read_count"),
+            "follower_count": counts.get("follower_count"),
+            "tags": tags,
         }
     }
-
 
 def extract_generic_metadata(url: str, html: str) -> Dict[str, Any]:
     soup = BeautifulSoup(html, "html.parser")
@@ -267,7 +398,7 @@ def extract_generic_metadata(url: str, html: str) -> Dict[str, Any]:
         "rating": None,
         "review_count": None,
         "chapter_count": None,
-        "view_count": None,
+        "view_count": html_signals.get("view_count"),
         "description": description,
         "cover_image_url": image,
         "language": "en",
@@ -297,5 +428,10 @@ def extract_platform_metadata(url: str, html: str) -> Dict[str, Any]:
         return extract_dreame_metadata(url, html)
 
     return extract_generic_metadata(url, html)
+
+
+
+
+
 
 
