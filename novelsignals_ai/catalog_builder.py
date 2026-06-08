@@ -216,6 +216,9 @@ def build_catalog(books: List[Dict[str, Any]], discovery_index: Dict[str, Dict[s
             "chapter_count": book.get("chapter_count"),
             "view_count": book.get("view_count"),
             "data_quality_score": book.get("data_quality_score"),
+            "reader_approval_score": book.get("reader_approval_score"),
+            "reader_popularity_score": book.get("reader_popularity_score"),
+            "reader_score": book.get("reader_score"),
             "novelsignals_score": book.get("novelsignals_score"),
             "description": book.get("description", ""),
             "cover_image_url": book.get("cover_image_url", ""),
@@ -630,6 +633,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 
