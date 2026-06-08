@@ -132,42 +132,77 @@ def quality_score(record: Dict[str, Any]) -> int:
     return min(score, 100)
 
 
-def novelsignals_score(record: Dict[str, Any]) -> float:
-    rating = record.get("rating") or 0
-    review_count = record.get("review_count") or 0
-    view_count = record.get("view_count") or 0
-    chapter_count = record.get("chapter_count") or 0
-    quality = record.get("data_quality_score") or 0
+def safe_number(value: Any) -> float:
+    try:
+        if value is None or value == "":
+            return 0.0
+        return float(value)
+    except Exception:
+        return 0.0
 
-    # Platform-neutral MVP formula.
-    # Rating is quality signal.
-    # Review count is engagement signal and uses log scale.
-    # View count is optional because many platforms do not expose it.
-    # Data quality prevents thin records from ranking too high.
 
-    score = 0.0
+def normalize_rating_to_10(rating: float) -> float:
+    rating = safe_number(rating)
+    if rating <= 0:
+        return 0.0
 
-    # Rating on 5-point scale -> max 35
-    score += min(rating / 5 * 35, 35)
+    # GoodNovel sometimes exposes 9.x, some platforms expose 4.x/5.
+    if rating <= 5:
+        return min(rating / 5 * 10, 10)
 
-    # Review engagement log scale -> max 35
-    # 10 reviews ≈ low signal, 1k+ reviews ≈ strong, 10k+ ≈ very strong.
+    return min(rating, 10)
+
+
+def reader_approval_score(record: Dict[str, Any]) -> float:
+    rating = normalize_rating_to_10(record.get("rating"))
+    review_count = safe_number(record.get("review_count"))
+
+    if rating <= 0:
+        return 0.0
+
+    rating_score = rating * 7.0  # max 70
+
+    # Review confidence: 10 reviews weak, 1k strong, 10k very strong.
+    confidence_score = 0.0
     if review_count > 0:
-        score += min(math.log10(review_count + 1) / 4 * 35, 35)
+        confidence_score = min(math.log10(review_count + 1) / 4 * 30, 30)
 
-    # Popularity/views -> max 10
-    if view_count > 0:
-        score += min(math.log10(view_count + 1) / 7 * 10, 10)
+    return round(min(rating_score + confidence_score, 100), 2)
 
-    # Content depth proxy -> max 5
-    if chapter_count > 0:
-        score += min(chapter_count / 300 * 5, 5)
 
-    # Data quality -> max 15
-    score += min(quality / 100 * 15, 15)
+def reader_popularity_score(record: Dict[str, Any]) -> float:
+    signals = [
+        safe_number(record.get("read_count")),
+        safe_number(record.get("view_count")),
+        safe_number(record.get("follow_count")),
+        safe_number(record.get("follower_count")),
+        safe_number(record.get("vote_count")),
+    ]
 
-    return round(score, 2)
+    strongest = max(signals) if signals else 0.0
 
+    if strongest <= 0:
+        return 0.0
+
+    # 10K = visible, 100K = strong, 1M+ = very strong, 10M+ = top-tier.
+    return round(min(math.log10(strongest + 1) / 7 * 100, 100), 2)
+
+
+def novelsignals_score(record: Dict[str, Any]) -> float:
+    approval = reader_approval_score(record)
+    popularity = reader_popularity_score(record)
+
+    if approval > 0 and popularity > 0:
+        score = approval * 0.4 + popularity * 0.6
+    elif popularity > 0:
+        score = popularity * 0.75
+    elif approval > 0:
+        score = approval * 0.75
+    else:
+        quality = safe_number(record.get("data_quality_score"))
+        score = min(quality / 100 * 20, 20)
+
+    return round(min(score, 100), 2)
 
 def validate_record(record: Dict[str, Any]) -> List[str]:
     errors = []
@@ -212,7 +247,10 @@ def normalize_record(raw: Dict[str, Any]) -> Dict[str, Any]:
 
     normalized["platform_metrics"] = build_platform_metrics(raw, normalized)
     normalized["data_quality_score"] = quality_score(normalized)
-    normalized["novelsignals_score"] = novelsignals_score(normalized)
+    normalized["reader_approval_score"] = reader_approval_score(normalized)
+    normalized["reader_popularity_score"] = reader_popularity_score(normalized)
+    normalized["reader_score"] = novelsignals_score(normalized)
+    normalized["novelsignals_score"] = normalized["reader_score"]
     normalized["validation_errors"] = validate_record(normalized)
 
     return normalized
@@ -277,4 +315,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
